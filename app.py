@@ -12,6 +12,7 @@ Fluxo:
 import os
 
 import folium
+import numpy as np
 import pandas as pd
 import streamlit as st
 from streamlit_folium import st_folium
@@ -139,7 +140,8 @@ for col in ["area_adubada_cobertura_ha", "kg_total_cobertura", "n_kg_cobertura",
 
 painel["pct_cobertura"] = (painel["area_adubada_cobertura_ha"] / painel["area_ha_kml"] * 100).round(1)
 painel["pct_base"] = (painel["area_subsolada_ha"] / painel["area_ha_kml"] * 100).round(1)
-painel["n_kg_ha_cobertura"] = (painel["n_kg_cobertura"] / painel["area_adubada_cobertura_ha"].replace(0, pd.NA)).round(2)
+painel["n_kg_ha_cobertura"] = painel["n_kg_cobertura"] / painel["area_adubada_cobertura_ha"].replace(0, np.nan)
+painel["n_kg_ha_cobertura"] = painel["n_kg_ha_cobertura"].round(2)
 
 
 def status_execucao(pct):
