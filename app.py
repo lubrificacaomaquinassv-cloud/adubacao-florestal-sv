@@ -22,6 +22,17 @@ from npk_calculator import aplicar_calculadora_no_df, extrair_formula, calcular_
 
 st.set_page_config(page_title="Adubação Florestal - Santa Vergínia", layout="wide")
 
+# Logo da empresa - procura em assets/ (padrão) e na raiz (fallback,
+# caso o arquivo tenha sido subido direto na raiz do repositório)
+_candidatos_logo = [
+    os.path.join(os.path.dirname(__file__), "assets", "logo_santa_verginia.png"),
+    os.path.join(os.path.dirname(__file__), "logo_santa_verginia.png"),
+    os.path.join(os.path.dirname(__file__), "logo_santa_verginia (1).png"),
+]
+_logo_path = next((p for p in _candidatos_logo if os.path.exists(p)), None)
+if _logo_path:
+    st.sidebar.image(_logo_path, use_container_width=True)
+
 # -----------------------------------------------------------------
 # Conexao Supabase (opcional - so ativa se as credenciais existirem)
 # -----------------------------------------------------------------
@@ -191,43 +202,63 @@ with aba_mapa:
         "Colorir talhões por:",
         ["Status Cobertura", "Status Base/Subsolagem", "Dose de N (kg/ha) - Cobertura"],
         horizontal=True,
+        key="variavel_cor_mapa",
     )
-
-    centro = [painel_f.geometry.centroid.y.mean(), painel_f.geometry.centroid.x.mean()]
-    m = folium.Map(location=centro, zoom_start=12, tiles="OpenStreetMap")
 
     cores_status = {"Completo": "#2e7d32", "Parcial": "#f9a825", "Não iniciado": "#c62828"}
 
-    for _, row in painel_f.iterrows():
+    def _cor_da_linha(row):
         if variavel_cor == "Status Cobertura":
-            cor = cores_status.get(row["status_cobertura"], "#999999")
-        elif variavel_cor == "Status Base/Subsolagem":
-            cor = cores_status.get(row["status_base"], "#999999")
-        else:
-            n = row["n_kg_ha_cobertura"]
-            if pd.isna(n) or n == 0:
-                cor = "#c62828"
-            elif n < 10:
-                cor = "#f9a825"
-            else:
-                cor = "#2e7d32"
+            return cores_status.get(row["status_cobertura"], "#999999")
+        if variavel_cor == "Status Base/Subsolagem":
+            return cores_status.get(row["status_base"], "#999999")
+        n = row["n_kg_ha_cobertura"]
+        if pd.isna(n) or n == 0:
+            return "#c62828"
+        return "#f9a825" if n < 10 else "#2e7d32"
 
-        popup_html = (
-            f"<b>Talhão {row['talhao']}</b> ({row['classe']})<br>"
-            f"Retiro: {row['retiro'] or '-'}<br>"
-            f"Área: {row['area_ha_kml']:.1f} ha<br>"
-            f"Cobertura: {row['pct_cobertura']:.0f}% ({row['status_cobertura']})<br>"
-            f"Base: {row['pct_base']:.0f}% ({row['status_base']})<br>"
-            f"N aplicado: {row['n_kg_ha_cobertura'] if pd.notna(row['n_kg_ha_cobertura']) else '-'} kg/ha"
+    @st.cache_resource(show_spinner="Montando o mapa...")
+    def montar_mapa(_gdf, variavel_cor_key):
+        """
+        Monta o mapa como UM UNICO GeoJson (FeatureCollection), em vez de um
+        folium.GeoJson por talhao. Com ~700+ talhoes, criar uma camada por
+        talhao sobrecarrega o DOM do navegador e causa o erro
+        'NotFoundError: removeChild' no Streamlit Cloud. Um unico layer com
+        varias features resolve isso e tambem carrega mais rapido.
+        """
+        gdf_mapa = _gdf.copy()
+        gdf_mapa["cor"] = gdf_mapa.apply(_cor_da_linha, axis=1)
+        gdf_mapa["popup_html"] = gdf_mapa.apply(
+            lambda row: (
+                f"Talhão {row['talhao']} ({row['classe']})<br>"
+                f"Retiro: {row['retiro'] or '-'}<br>"
+                f"Área: {row['area_ha_kml']:.1f} ha<br>"
+                f"Cobertura: {row['pct_cobertura']:.0f}% ({row['status_cobertura']})<br>"
+                f"Base: {row['pct_base']:.0f}% ({row['status_base']})<br>"
+                f"N aplicado: {row['n_kg_ha_cobertura'] if pd.notna(row['n_kg_ha_cobertura']) else '-'} kg/ha"
+            ),
+            axis=1,
         )
-        folium.GeoJson(
-            row.geometry.__geo_interface__,
-            style_function=lambda x, cor=cor: {"fillColor": cor, "color": "#333", "weight": 1, "fillOpacity": 0.6},
-            tooltip=f"Talhão {row['talhao']}",
-            popup=folium.Popup(popup_html, max_width=250),
-        ).add_to(m)
 
-    st_folium(m, width=1200, height=600)
+        centro = [gdf_mapa.geometry.centroid.y.mean(), gdf_mapa.geometry.centroid.x.mean()]
+        mapa = folium.Map(location=centro, zoom_start=12, tiles="OpenStreetMap")
+
+        folium.GeoJson(
+            gdf_mapa[["talhao", "cor", "popup_html", "geometry"]].__geo_interface__,
+            style_function=lambda feature: {
+                "fillColor": feature["properties"]["cor"],
+                "color": "#333",
+                "weight": 1,
+                "fillOpacity": 0.6,
+            },
+            tooltip=folium.GeoJsonTooltip(fields=["talhao"], aliases=["Talhão:"]),
+            popup=folium.GeoJsonPopup(fields=["popup_html"], labels=False, max_width=250),
+        ).add_to(mapa)
+
+        return mapa
+
+    mapa = montar_mapa(painel_f, variavel_cor)
+    st_folium(mapa, width=1200, height=600, returned_objects=[], key="mapa_talhoes")
 
 # --- Cobertura ---
 with aba_cobertura:
