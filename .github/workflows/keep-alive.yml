@@ -1,0 +1,40 @@
+name: Keep Streamlit Apps Awake
+
+on:
+  schedule:
+    - cron: '0 9 * * 1-6'  # 6h BRT (UTC-3), segunda a sábado
+  workflow_dispatch:  # permite disparo manual pra testar
+
+jobs:
+  ping-apps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping all Streamlit apps
+        run: |
+          urls=(
+            "https://adubacao-florestal-sv-hbqqrye72rwfhhcjprayxy.streamlit.app/"
+            "https://combustivelcontrole-anzrygxbtddxvaemy9nkru.streamlit.app/"
+            "https://controlerefeitoriosv-th2xfqra7fgc9ygar4horq.streamlit.app/"
+            "https://controle-viagens-sv-3trphy8ylik6fzpvgiminb.streamlit.app/"
+            "https://gestor-oficina-sv-arib89adkrv4nrypidqhzr.streamlit.app/"
+            "https://oficina-veiculos-sv-adwnggsbrx87kswdesytxm.streamlit.app/"
+            "https://oficinasv-dytza2mqqtujkytuj7jgfm.streamlit.app/"
+            "https://painel-estrategico-sv-aeeenn9xq3hvcnahvf7i3u.streamlit.app/"
+            "https://painel-viagens-sv-dffyeuecgd2aknozaqmevy.streamlit.app/"
+            "https://postosv-uezgfprqxwbclszt8dwrue.streamlit.app/"
+            "https://requisicao-compras.streamlit.app/"
+            "https://sigalmox-hketsapjanxcwfzbjscrxa.streamlit.app/"
+            "https://sigalmox-acayytyrats59qfmtbe36u.streamlit.app/"
+            "https://sigcf-borracharia-3gmjvre7rhltewlpenfzrv.streamlit.app/"
+            "https://sigcf-financeiro-rzmgqrrw56zfzkn4sfjng7.streamlit.app/"
+            "https://sigcf-plataforma-2s7iitujusrbtzde49xdel.streamlit.app/"
+            "https://sigcf-rh-kjc7swamm7cicncjrtzfvo.streamlit.app/"
+            "https://sigcf-rh-nvkpmzcrbbrfrsjznrxnmo.streamlit.app/"
+            "https://sigpec-ex2z9ndnksuyrwkhphtzd5.streamlit.app/"
+          )
+          for url in "${urls[@]}"; do
+            echo "Pingando: $url"
+            curl -s -o /dev/null -w "%{http_code}" "$url" || echo " -> falhou"
+            echo ""
+            sleep 3
+          done
