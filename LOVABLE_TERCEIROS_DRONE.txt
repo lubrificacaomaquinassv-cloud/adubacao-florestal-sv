@@ -1,0 +1,41 @@
+LOVABLE — Painel Operações Florestal Terceiros / Drone
+======================================================
+
+Tabela principal (Supabase / PostgREST):
+  operacoes_florestais_terceiros_drone
+
+Views prontas:
+  vw_api_terceiros_drone              → listagem flat (1 linha = 1 aplicação)
+  vw_terceiros_drone_resumo_prestador → KPI por COSER / F-ORION / ECOAERO e mês
+  vw_terceiros_drone_por_horto        → agregado por horto (Taquarussu, Eucalipto, etc.)
+  vw_terceiros_drone_por_talhao       → agregado por talhão (cruzamento mapa)
+  vw_terceiros_drone_mapa             → join com dim_talhoes (KML) + status cobertura
+  vw_terceiros_drone_por_operacao     → por tipo de operação e produto
+
+Campos principais (vw_api_terceiros_drone):
+  id, prestador, operacao_realizada, produto, horto,
+  talhao_raw, talhao_codigo, talhao_id (FK dim_talhoes),
+  talhao_nome, classe_uso, retiro, area_cadastro_ha,
+  ha_aplicado, tarifa_rs_ha, valor_total, data_inicio,
+  periodo_mes, produtos_por_ha (JSON EcoAero)
+
+Prestadores:
+  COSER   — pulverização sustentável
+  F-ORION — drone (Fev–Ago 2026)
+  ECOAERO — drone Taquarussu (doses por produto/ha)
+
+Mapa GIS:
+  Usar talhao_codigo para join com public.dim_talhoes (codigo + area_ha do KML).
+  Colorir por ha_aplicado_total ou prestador (vw_terceiros_drone_por_talhao).
+
+Filtros sugeridos no Lovable:
+  - prestador (multiselect)
+  - periodo_mes / mes_aplicacao
+  - horto
+  - operacao_realizada
+
+KPIs:
+  - sum(ha_aplicado)
+  - sum(valor_total)
+  - count distinct talhao_codigo
+  - avg(tarifa_rs_ha)

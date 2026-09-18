@@ -23,6 +23,7 @@ from ingestion.kml_parser import ler_talhoes_kml, talhoes_com_codigo_ambiguo
 from ingestion.excel_parser import ler_adubacao_cobertura, ler_adubacao_base
 from ingestion.pdf_retiro_parser import ler_pasta_pdfs_retiro
 from npk_calculator import aplicar_calculadora_no_df, calcular_npk_aplicado, dose_por_ha
+from painel_terceiros import carregar_terceiros, render_aba_terceiros
 
 st.set_page_config(page_title="Adubação Florestal - Santa Vergínia", layout="wide", initial_sidebar_state="expanded")
 
@@ -92,6 +93,21 @@ st.sidebar.title("📂 Fontes de dados")
 arq_kml = st.sidebar.file_uploader("Mapa da fazenda (KML)", type=["kml"])
 arq_cobertura = st.sidebar.file_uploader("Adubação de Cobertura (xlsx)", type=["xlsx"])
 arq_base = st.sidebar.file_uploader("Adubação de Base / Subsolagem (xlsx)", type=["xlsx"])
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Operações Terceiros / Drone")
+arq_terceiros = st.sidebar.file_uploader(
+    "Planilhas COSER / F-ORION / EcoAero (xlsx, múltiplos)",
+    type=["xlsx"],
+    accept_multiple_files=True,
+)
+_pasta_terceiros_default = os.path.join(
+    os.path.dirname(__file__), "dados_terceiros"
+)
+_usar_pasta_local = st.sidebar.checkbox(
+    "Carregar pasta local dados_terceiros/",
+    value=os.path.isdir(_pasta_terceiros_default),
+)
 
 if not (arq_kml and arq_cobertura and arq_base):
     st.markdown(
@@ -241,8 +257,9 @@ else:
     col3.metric("% Base/Subsolagem", "—")
 col4.metric("Talhões com alerta de sequência", int(painel_f["alerta_sequencia"].sum()))
 
-aba_mapa, aba_cobertura, aba_base, aba_calc, aba_supabase = st.tabs(
-    ["🗺️ Mapa", "🌾 Cobertura", "🚜 Base/Subsolagem", "🧮 Calculadora NPK", "☁️ Supabase"]
+aba_mapa, aba_cobertura, aba_base, aba_calc, aba_terceiros, aba_supabase = st.tabs(
+    ["🗺️ Mapa", "🌾 Cobertura", "🚜 Base/Subsolagem", "🧮 Calculadora NPK",
+     "🚁 Terceiros / Drone", "☁️ Supabase"]
 )
 
 # --- Mapa ---
@@ -400,6 +417,19 @@ with aba_calc:
     nao_identificados = df_cobertura[df_cobertura["formula_npk"] == "não identificada"]["fertilizante"].unique()
     if len(nao_identificados) > 0:
         st.warning(f"Fertilizantes sem fórmula reconhecida (cadastrar em FORMULAS_ADUBO): {list(nao_identificados)}")
+
+# --- Terceiros / Drone ---
+with aba_terceiros:
+    df_terceiros = pd.DataFrame()
+    try:
+        if arq_terceiros:
+            df_terceiros = carregar_terceiros(arq_terceiros)
+        elif _usar_pasta_local and os.path.isdir(_pasta_terceiros_default):
+            df_terceiros = carregar_terceiros(_pasta_terceiros_default)
+    except Exception as e:
+        st.error(f"Erro ao ler planilhas de terceiros: {e}")
+        st.exception(e)
+    render_aba_terceiros(df_terceiros, gdf_talhoes=gdf_validos, get_engine=get_engine)
 
 # --- Supabase ---
 with aba_supabase:
