@@ -105,18 +105,19 @@ _pasta_terceiros_default = os.path.join(
     os.path.dirname(__file__), "dados_terceiros"
 )
 _usar_pasta_local = st.sidebar.checkbox(
-    "Carregar pasta local dados_terceiros/",
+    "Carregar planilhas terceiros (COSER / F-ORION / EcoAero)",
     value=os.path.isdir(_pasta_terceiros_default),
+    help="Já vem com as planilhas da pasta dados_terceiros/ no servidor.",
 )
+_kml_default = os.path.join(os.path.dirname(__file__), "dados", "fazenda_santa_virginia_completo.kml")
+_modo_completo = bool(arq_kml and arq_cobertura and arq_base)
+_tem_kml = bool(arq_kml) or os.path.isfile(_kml_default)
 
-if not (arq_kml and arq_cobertura and arq_base):
-    st.markdown(
-        '<div class="sv-banner"><h1>🌳 Painel de Adubação Florestal</h1>'
-        '<p>Fazenda Santa Vergínia — Cobertura · Base/Subsolagem · Calculadora NPK</p></div>',
-        unsafe_allow_html=True,
-    )
-    st.info("Suba os 3 arquivos na barra lateral (KML + Cobertura + Base) para gerar o painel.")
-    st.stop()
+st.sidebar.markdown("---")
+st.sidebar.caption(
+    "**Modo Terceiros/Drone:** abre direto (KML + planilhas já no servidor).\n\n"
+    "**Modo NPK completo:** suba também Cobertura + Base (xlsx)."
+)
 
 # -----------------------------------------------------------------
 # Ingestao (cache para nao reprocessar a cada interacao do usuario)
@@ -152,6 +153,58 @@ def _carregar_de_para_pdf():
         return pd.DataFrame(columns=["talhao", "retiro", "arquivo_origem"])
     return ler_pasta_pdfs_retiro(pasta_mapas)
 
+
+def _bytes_kml() -> bytes | None:
+    if arq_kml:
+        return arq_kml.getvalue()
+    if os.path.isfile(_kml_default):
+        with open(_kml_default, "rb") as f:
+            return f.read()
+    return None
+
+
+def _carregar_df_terceiros() -> pd.DataFrame:
+    if arq_terceiros:
+        return carregar_terceiros(arq_terceiros)
+    if _usar_pasta_local and os.path.isdir(_pasta_terceiros_default):
+        return carregar_terceiros(_pasta_terceiros_default)
+    return pd.DataFrame()
+
+
+# -----------------------------------------------------------------
+# Modo Terceiros/Drone — KML + planilhas já embutidos (sem upload)
+# -----------------------------------------------------------------
+if not _modo_completo:
+    if not _tem_kml:
+        st.markdown(
+            '<div class="sv-banner"><h1>🌳 Painel de Adubação Florestal</h1>'
+            '<p>Fazenda Santa Vergínia — Terceiros/Drone · Cobertura · Base · NPK</p></div>',
+            unsafe_allow_html=True,
+        )
+        st.error("Mapa KML não encontrado. Suba o arquivo **fazenda_santa_virginia_completo.kml** na barra lateral.")
+        st.stop()
+
+    try:
+        gdf_talhoes = _carregar_kml(_bytes_kml())
+        gdf_validos = gdf_talhoes[gdf_talhoes["talhao"].notna()].copy()
+        df_terceiros = _carregar_df_terceiros()
+    except Exception as e:
+        st.error(f"Erro ao processar KML / terceiros: {e}")
+        st.exception(e)
+        st.stop()
+
+    st.markdown(
+        '<div class="sv-banner"><h1>🚁 Operações Terceiros / Drone</h1>'
+        '<p>Fazenda Santa Vergínia — COSER · F-ORION · EcoAero</p></div>',
+        unsafe_allow_html=True,
+    )
+    st.success("Mapa KML e planilhas de terceiros carregados automaticamente.")
+    st.info(
+        "Para ver também **Cobertura**, **Base/Subsolagem** e **Calculadora NPK**, "
+        "suba na barra lateral as planilhas de Adubação de Cobertura e Base (xlsx)."
+    )
+    render_aba_terceiros(df_terceiros, gdf_talhoes=gdf_validos, get_engine=get_engine)
+    st.stop()
 
 try:
     gdf_talhoes = _carregar_kml(arq_kml.getvalue())
@@ -420,15 +473,12 @@ with aba_calc:
 
 # --- Terceiros / Drone ---
 with aba_terceiros:
-    df_terceiros = pd.DataFrame()
     try:
-        if arq_terceiros:
-            df_terceiros = carregar_terceiros(arq_terceiros)
-        elif _usar_pasta_local and os.path.isdir(_pasta_terceiros_default):
-            df_terceiros = carregar_terceiros(_pasta_terceiros_default)
+        df_terceiros = _carregar_df_terceiros()
     except Exception as e:
         st.error(f"Erro ao ler planilhas de terceiros: {e}")
         st.exception(e)
+        df_terceiros = pd.DataFrame()
     render_aba_terceiros(df_terceiros, gdf_talhoes=gdf_validos, get_engine=get_engine)
 
 # --- Supabase ---
